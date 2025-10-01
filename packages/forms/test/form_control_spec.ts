@@ -363,6 +363,142 @@ describe('FormControl', () => {
          expect(c.hasValidator(minValidator)).toEqual(true);
          expect(c.hasValidator(Validators.min(5))).toEqual(false);
        });
+
+    it('should replace same type validators when using addValidators', () => {
+      const c = new FormControl('');
+      
+      // Add required validator
+      c.addValidators(Validators.required);
+      expect(c.errors).toEqual({'required': true});
+      expect(c.validator).toBeTruthy();
+      
+      // Add required again - should replace, not accumulate
+      c.addValidators(Validators.required);
+      expect(c.errors).toEqual({'required': true});
+      
+      // Verify we still have only one validator by testing valid state
+      c.setValue('test');
+      expect(c.valid).toBe(true);
+      expect(c.errors).toBeNull();
+    });
+
+    it('should replace min validators with different values when using addValidators', () => {
+      const c = new FormControl(3);
+      
+      // Add min(5) validator
+      c.addValidators(Validators.min(5));
+      expect(c.errors).toEqual({'min': {'min': 5, 'actual': 3}});
+      
+      // Replace with min(2) - should replace, not accumulate  
+      c.addValidators(Validators.min(2));
+      expect(c.valid).toBe(true);
+      expect(c.errors).toBeNull();
+      
+      // Verify the new min(2) is active, not min(5)
+      c.setValue(1);
+      expect(c.errors).toEqual({'min': {'min': 2, 'actual': 1}});
+    });
+
+    it('should replace max validators with different values when using addValidators', () => {
+      const c = new FormControl(10);
+      
+      // Add max(5) validator
+      c.addValidators(Validators.max(5));
+      expect(c.errors).toEqual({'max': {'max': 5, 'actual': 10}});
+      
+      // Replace with max(15) - should replace, not accumulate
+      c.addValidators(Validators.max(15));
+      expect(c.valid).toBe(true);
+      expect(c.errors).toBeNull();
+      
+      // Verify the new max(15) is active, not max(5)
+      c.setValue(20);
+      expect(c.errors).toEqual({'max': {'max': 15, 'actual': 20}});
+    });
+
+    it('should replace email validators when using addValidators', () => {
+      const c = new FormControl('invalid-email');
+      
+      // Add email validator
+      c.addValidators(Validators.email);
+      expect(c.errors).toEqual({'email': true});
+      
+      // Add email again - should replace, not accumulate
+      c.addValidators(Validators.email);
+      expect(c.errors).toEqual({'email': true});
+      
+      // Verify we still have only one validator
+      c.setValue('test@example.com');
+      expect(c.valid).toBe(true);
+      expect(c.errors).toBeNull();
+    });
+
+    it('should accumulate different type validators when using addValidators', () => {
+      const c = new FormControl('');
+      
+      // Add required validator
+      c.addValidators(Validators.required);
+      expect(c.errors).toEqual({'required': true});
+      
+      // Add email validator (different type) - should accumulate
+      c.addValidators(Validators.email);
+      c.setValue('invalid-email');
+      expect(c.errors).toEqual({'email': true});
+      
+      // Verify both validators are active
+      c.setValue('');
+      expect(c.errors).toEqual({'required': true});
+    });
+
+    it('should replace custom validators with same function name', () => {
+      const customValidator1 = (control: AbstractControl) => 
+        control.value === 'forbidden1' ? {'forbidden': true} : null;
+      const customValidator2 = (control: AbstractControl) => 
+        control.value === 'forbidden2' ? {'forbidden': true} : null;
+      
+      // Give them the same name
+      Object.defineProperty(customValidator1, 'name', { value: 'customValidator' });
+      Object.defineProperty(customValidator2, 'name', { value: 'customValidator' });
+      
+      const c = new FormControl('forbidden1');
+      
+      // Add first custom validator
+      c.addValidators(customValidator1);
+      expect(c.errors).toEqual({'forbidden': true});
+      
+      // Replace with second custom validator (same name)
+      c.addValidators(customValidator2);
+      
+      // Test that only the second validator is active
+      c.setValue('forbidden1');
+      expect(c.valid).toBe(true); // First validator would fail here
+      expect(c.errors).toBeNull();
+      
+      c.setValue('forbidden2');
+      expect(c.errors).toEqual({'forbidden': true}); // Second validator fails
+    });
+
+    it('should not interfere with existing functionality when no replacement occurs', () => {
+      const c = new FormControl('test');
+      const customValidator = (control: AbstractControl) => 
+        control.value === 'bad' ? {'custom': true} : null;
+      
+      // Add multiple different validators
+      c.addValidators([Validators.required, Validators.email, customValidator]);
+      
+      // Test with invalid email
+      c.setValue('invalid-email');
+      expect(c.errors).toEqual({'email': true});
+      
+      // Test with custom validator trigger
+      c.setValue('bad');
+      expect(c.errors).toEqual({'custom': true});
+      
+      // Test with valid value
+      c.setValue('test@example.com');
+      expect(c.valid).toBe(true);
+      expect(c.errors).toBeNull();
+    });
   });
 
   describe('asyncValidator', () => {
